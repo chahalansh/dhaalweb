@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Wheat Disease Detection</title>
+  <script src="https://www.gstatic.com/firebasejs/9.6.11/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.11/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.11/firebase-storage-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore-compat.js"></script>
+</head>
+<body>
+  <h2>Wheat Disease Detection</h2>
+
+  <div id="login-section">
+    <button onclick="signIn()">Sign In with Google</button>
+  </div>
+
+  <div id="app-section" style="display:none;">
+    <p id="user-info"></p>
+    <input type="file" accept="image/*" capture="environment" id="fileInput"><br><br>
+    <button onclick="uploadImage()">Upload & Predict</button>
+    <p id="status">Status: Waiting for upload...</p>
+    <p id="result">Prediction: </p>
+    <button onclick="signOut()">Sign Out</button>
+  </div>
+
+  <script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyAGKOQOh1zGzi3FpanOjHVmWi3hH5sYgZg",
+        authDomain: "dhaalpredict.firebaseapp.com",
+        projectId: "dhaalpredict",
+        storageBucket: "dhaalpredict.firebasestorage.app",
+        messagingSenderId: "460385842774",
+        appId: "1:460385842774:web:048a3c36cb16ea4e5fedf7",
+        measurementId: "G-0NH38MF3SR"
+    };
+    
+
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const storage = firebase.storage();
+    const db = firebase.firestore();
+
+    let currentUser = null;
+
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        currentUser = user;
+        document.getElementById('login-section').style.display = 'none';
+        document.getElementById('app-section').style.display = 'block';
+        document.getElementById('user-info').innerText = "Logged in as: " + user.email;
+      } else {
+        document.getElementById('login-section').style.display = 'block';
+        document.getElementById('app-section').style.display = 'none';
+      }
+    });
+
+    function signIn() {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      auth.signInWithPopup(provider);
+    }
+
+    function signOut() {
+      auth.signOut();
+    }
+
+    async function uploadImage() {
+      const file = document.getElementById("fileInput").files[0];
+      if (!file) return alert("Please select an image!");
+
+      const uid = currentUser.uid;
+      const filename = Date.now() + "_" + file.name;
+      const storageRef = storage.ref(`images/${uid}/${filename}`);
+
+      document.getElementById("status").innerText = "Uploading...";
+
+      await storageRef.put(file);
+
+      const docRef = await db.collection("requests").add({
+        uid: uid,
+        filename: filename,
+        status: "pending",
+        result: ""
+      });
+
+      document.getElementById("status").innerText = "Image uploaded. Waiting for prediction...";
+
+      // Listen for result update
+      const unsubscribe = docRef.onSnapshot(doc => {
+        const data = doc.data();
+        if (data.status === "done") {
+          document.getElementById("status").innerText = "Prediction complete.";
+          document.getElementById("result").innerText = "Prediction: " + data.result;
+          unsubscribe();
+        }
+      });
+    }
+  </script>
+</body>
+</html>
