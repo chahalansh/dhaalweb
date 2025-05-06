@@ -1,99 +1,100 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Wheat Disease Detection</title>
-  <script src="https://www.gstatic.com/firebasejs/9.6.11/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.11/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.11/firebase-storage-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore-compat.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wheat Disease Detector</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.10.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.10.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.10.0/firebase-firestore-compat.js"></script>
 </head>
-<body>
-  <h2>Wheat Disease Detection</h2>
+<body class="bg-green-50 min-h-screen flex items-center justify-center px-4">
+  <div class="w-full max-w-md bg-white p-6 rounded-xl shadow-md">
+    <h2 class="text-2xl font-bold text-center mb-4">🌾 Wheat Disease Detector</h2>
 
-  <div id="login-section">
-    <button onclick="signIn()">Sign In with Google</button>
-  </div>
+    <div id="authSection" class="text-center mb-4">
+      <button id="loginBtn" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 w-full">
+        Login with Google
+      </button>
+    </div>
 
-  <div id="app-section" style="display:none;">
-    <p id="user-info"></p>
-    <input type="file" accept="image/*" capture="environment" id="fileInput"><br><br>
-    <button onclick="uploadImage()">Upload & Predict</button>
-    <p id="status">Status: Waiting for upload...</p>
-    <p id="result">Prediction: </p>
-    <button onclick="signOut()">Sign Out</button>
+    <div id="uploadSection" class="hidden">
+      <input type="file" id="fileInput" accept="image/*" class="mb-4 w-full" />
+      <button id="submitBtn" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 w-full">
+        Upload & Predict
+      </button>
+
+      <div id="status" class="text-center mt-4 text-sm text-gray-600"></div>
+      <div id="result" class="text-center text-lg font-semibold mt-2 text-green-800"></div>
+    </div>
   </div>
 
   <script>
+    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
     const firebaseConfig = {
-        apiKey: "AIzaSyAGKOQOh1zGzi3FpanOjHVmWi3hH5sYgZg",
-        authDomain: "dhaalpredict.firebaseapp.com",
-        projectId: "dhaalpredict",
-        storageBucket: "dhaalpredict.firebasestorage.app",
-        messagingSenderId: "460385842774",
-        appId: "1:460385842774:web:048a3c36cb16ea4e5fedf7",
-        measurementId: "G-0NH38MF3SR"
+      apiKey: "AIzaSyAGKOQOh1zGzi3FpanOjHVmWi3hH5sYgZg",
+      authDomain: "dhaalpredict.firebaseapp.com",
+      projectId: "dhaalpredict",
+      storageBucket: "dhaalpredict.firebasestorage.app",
+      messagingSenderId: "460385842774",
+      appId: "1:460385842774:web:048a3c36cb16ea4e5fedf7",
+      measurementId: "G-0NH38MF3SR"
     };
-    
 
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
-    const storage = firebase.storage();
     const db = firebase.firestore();
 
     let currentUser = null;
 
-    auth.onAuthStateChanged(user => {
-      if (user) {
-        currentUser = user;
-        document.getElementById('login-section').style.display = 'none';
-        document.getElementById('app-section').style.display = 'block';
-        document.getElementById('user-info').innerText = "Logged in as: " + user.email;
-      } else {
-        document.getElementById('login-section').style.display = 'block';
-        document.getElementById('app-section').style.display = 'none';
-      }
-    });
+    const loginBtn = document.getElementById("loginBtn");
+    const fileInput = document.getElementById("fileInput");
+    const submitBtn = document.getElementById("submitBtn");
+    const statusText = document.getElementById("status");
+    const resultText = document.getElementById("result");
+    const uploadSection = document.getElementById("uploadSection");
+    const authSection = document.getElementById("authSection");
 
-    function signIn() {
+    loginBtn.onclick = async () => {
       const provider = new firebase.auth.GoogleAuthProvider();
-      auth.signInWithPopup(provider);
-    }
+      const result = await auth.signInWithPopup(provider);
+      currentUser = result.user;
 
-    function signOut() {
-      auth.signOut();
-    }
+      authSection.classList.add("hidden");
+      uploadSection.classList.remove("hidden");
+    };
 
-    async function uploadImage() {
-      const file = document.getElementById("fileInput").files[0];
-      if (!file) return alert("Please select an image!");
+    submitBtn.onclick = async () => {
+      const file = fileInput.files[0];
+      if (!file || !currentUser) return alert("Login and choose an image first.");
 
-      const uid = currentUser.uid;
-      const filename = Date.now() + "_" + file.name;
-      const storageRef = storage.ref(`images/${uid}/${filename}`);
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64Image = reader.result.split(',')[1];
+        const docRef = await db.collection("requests").add({
+          uid: currentUser.uid,
+          image: base64Image,
+          status: "pending",
+          result: "",
+          timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
 
-      document.getElementById("status").innerText = "Uploading...";
+        statusText.innerText = "🕒 Waiting for prediction...";
+        resultText.innerText = "";
 
-      await storageRef.put(file);
-
-      const docRef = await db.collection("requests").add({
-        uid: uid,
-        filename: filename,
-        status: "pending",
-        result: ""
-      });
-
-      document.getElementById("status").innerText = "Image uploaded. Waiting for prediction...";
-
-      // Listen for result update
-      const unsubscribe = docRef.onSnapshot(doc => {
-        const data = doc.data();
-        if (data.status === "done") {
-          document.getElementById("status").innerText = "Prediction complete.";
-          document.getElementById("result").innerText = "Prediction: " + data.result;
-          unsubscribe();
-        }
-      });
-    }
+        const unsub = db.collection("requests").doc(docRef.id)
+          .onSnapshot((doc) => {
+            const data = doc.data();
+            if (data.status === "done" || data.status === "error") {
+              statusText.innerText = "✅ Prediction received!";
+              resultText.innerText = `Result: ${data.result}`;
+              unsub();
+            }
+          });
+      };
+      reader.readAsDataURL(file);
+    };
   </script>
 </body>
 </html>
